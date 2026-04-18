@@ -67,24 +67,56 @@ class Transcriber:
         self.running = False
 
     def _pick_device_and_rate(self) -> tuple[int | None, int]:
-        """Prefer built-in Mac mic over AirPods/Bluetooth (which may be busy
-        with the call itself). Returns (device_index, sample_rate)."""
+        """Pick the best input device, in this order:
+          1. An aggregate device the user set up for call capture
+             ("Ara Capture" by convention) — hears BOTH sides of the call.
+          2. BlackHole on its own — hears only the other side, but that's
+             still better than nothing for a call.
+          3. Built-in Mac mic — hears only the user (old behaviour).
+          4. Anything non-bluetooth.
+
+        Returns (device_index, sample_rate).
+        """
+        # Highest priority: user-configured aggregate devices that mix mic +
+        # system audio so we hear both sides of a FaceTime/Zoom call.
+        aggregate_keywords = ["ara capture", "ara input", "call capture",
+                              "aggregate"]
+        loopback_keywords = ["blackhole", "loopback", "soundflower"]
         preferred_keywords = ["macbook", "built-in", "internal"]
         avoid_keywords = ["airpods", "bluetooth", "hands-free"]
         chosen_idx = None
         chosen_name = None
         try:
             devices = sd.query_devices()
-            # First pass: prefer built-in
-            for i, dev in enumerate(devices):
-                if dev.get("max_input_channels", 0) <= 0:
-                    continue
-                name = (dev.get("name") or "").lower()
-                if any(k in name for k in preferred_keywords):
-                    chosen_idx = i
-                    chosen_name = dev.get("name")
-                    break
-            # Second pass: any non-bluetooth
+
+            def _find(keywords):
+                for i, dev in enumerate(devices):
+                    if dev.get("max_input_channels", 0) <= 0:
+                        continue
+                    name = (dev.get("name") or "").lower()
+                    if any(k in name for k in keywords):
+                        return i, dev.get("name")
+                return None, None
+
+            # 1. Aggregate capture device (mic + system audio) — best case.
+            chosen_idx, chosen_name = _find(aggregate_keywords)
+            # 2. Raw loopback driver (captures call audio, misses user).
+            if chosen_idx is None:
+                chosen_idx, chosen_name = _find(loopback_keywords)
+                if chosen_idx is not None:
+                    print("[transcriber] WARNING: capturing loopback only — "
+                          "you'll hear the other person but not yourself. "
+                          "Create an Aggregate Device called 'Ara Capture' "
+                          "combining your mic + BlackHole to hear both sides.")
+            # 3. Built-in mic (only hears the user).
+            if chosen_idx is None:
+                chosen_idx, chosen_name = _find(preferred_keywords)
+                if chosen_idx is not None:
+                    print("[transcriber] NOTE: using built-in mic only — will "
+                          "NOT hear the other side of a call. Install "
+                          "BlackHole + create an 'Ara Capture' Aggregate "
+                          "Device (see README) to capture both sides.")
+            # 4. Anything non-bluetooth.
             if chosen_idx is None:
                 for i, dev in enumerate(devices):
                     if dev.get("max_input_channels", 0) <= 0:
@@ -94,7 +126,7 @@ class Transcriber:
                         chosen_idx = i
                         chosen_name = dev.get("name")
                         break
-            # Fall back to whatever default is
+            # Fall back to system default.
             if chosen_idx is None:
                 info = sd.query_devices(kind="input")
                 chosen_name = info.get("name")

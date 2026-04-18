@@ -60,6 +60,44 @@ pip install -r requirements.txt
 
 **Install EB Garamond** (optional — falls back to Hoefler Text / Baskerville / Palatino otherwise): download from [fonts.google.com/specimen/EB+Garamond](https://fonts.google.com/specimen/EB+Garamond), unzip, drag the `.ttf` files into Font Book.
 
+## Capture both sides of the call (BlackHole setup)
+
+**Without this step the app only hears YOU, not the other person on FaceTime/Zoom.** The mic can't pick up what's playing through your speakers or AirPods. Fix: install a virtual audio loopback and combine it with your mic into a single "Aggregate Device" the app can capture from.
+
+**1. Install BlackHole 2ch** (free, open-source virtual audio driver)
+
+```bash
+# easiest: via Homebrew
+brew install blackhole-2ch
+# or download the installer from https://existential.audio/blackhole/
+```
+
+After install, **reboot your Mac** (required for macOS to load the driver).
+
+**2. Create an Aggregate Device called "Ara Capture"** (app captures from this)
+
+Open **Audio MIDI Setup** (Spotlight → "Audio MIDI") → click `+` bottom-left → **Create Aggregate Device**. In the right pane, check:
+
+- ☑ MacBook Pro Microphone (or your preferred mic)
+- ☑ BlackHole 2ch
+
+Double-click the new device in the list, rename it to **Ara Capture**.
+
+**3. Create a Multi-Output Device called "Ara Output"** (so you can still hear the call)
+
+Same window → `+` → **Create Multi-Output Device**. Check:
+
+- ☑ MacBook Pro Speakers (or AirPods)
+- ☑ BlackHole 2ch
+
+Rename it to **Ara Output**.
+
+**4. Route FaceTime audio through it**
+
+System Settings → Sound → Output → select **Ara Output**. FaceTime's audio now goes to both your ears and BlackHole at the same time. The app auto-picks any device whose name contains "Ara Capture", "aggregate", or "BlackHole" — no code change needed.
+
+Verify: start the app, look for `[transcriber] using input device: 'Ara Capture'` in the log.
+
 ## Required macOS permissions
 
 Open **System Settings → Privacy & Security** and grant Terminal (or your Python runner) access to:
