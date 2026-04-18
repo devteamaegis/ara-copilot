@@ -7,7 +7,14 @@ Automation → Calendar; grant it.
 """
 import re
 import subprocess
+import time
 from datetime import datetime, timedelta
+
+
+# In-memory cache so repeated queries within the same call don't keep
+# re-running AppleScript. Google Calendar sync doesn't change second-to-second.
+_EVENT_CACHE: dict = {"at": 0.0, "events": []}
+_CACHE_TTL_SECONDS = 60
 
 
 # Look 21 days ahead so "next Friday", "this weekend", "in two weeks" all resolve.
@@ -20,6 +27,8 @@ set hours of today to 0
 set minutes of today to 0
 set seconds of today to 0
 set lookahead to today + ({_LOOKAHEAD_DAYS} * days)
+
+tell application "Calendar" to launch
 
 tell application "Calendar"
     set cal_list to every calendar
@@ -76,7 +85,28 @@ def _parse_apple_date(s: str) -> datetime | None:
     return None
 
 
+def _ensure_calendar_running():
+    """Launch Calendar.app silently in the background if it's not running."""
+    try:
+        check = subprocess.run(
+            ["pgrep", "-xi", "Calendar"], capture_output=True, timeout=2,
+        )
+        if check.returncode != 0:
+            subprocess.Popen(["open", "-g", "-a", "Calendar"])
+            time.sleep(1.5)
+    except Exception:
+        pass
+
+
 def get_events(verbose: bool = False) -> list[dict]:
+    # Serve from cache if fresh — keeps live-call loop responsive.
+    if (not verbose
+            and _EVENT_CACHE["events"]
+            and time.time() - _EVENT_CACHE["at"] < _CACHE_TTL_SECONDS):
+        return _EVENT_CACHE["events"]
+
+    _ensure_calendar_running()
+
     try:
         r = subprocess.run(["osascript", "-e", _APPLESCRIPT],
                            capture_output=True, text=True, timeout=20)
@@ -124,6 +154,11 @@ def get_events(verbose: bool = False) -> list[dict]:
                 })
 
     events.sort(key=lambda e: e["start"])
+
+    # Cache for subsequent queries within TTL.
+    if events:
+        _EVENT_CACHE["events"] = events
+        _EVENT_CACHE["at"] = time.time()
 
     if verbose or not events:
         print(f"[calendar] total calendars visible: {total_cals}")

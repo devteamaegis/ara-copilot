@@ -4,9 +4,61 @@ calendar questions, honest fallback for anything else.
 Same ask_ara(question) -> str interface.
 """
 import re
+from datetime import datetime
 
 from brain import route
 import calendar_lookup
+
+
+# --- General-knowledge patterns handled locally (instant, no network) ---
+
+_TIME_Q = re.compile(
+    r"\bwhat(?:'s|\s+is)?\s+the\s+time\b|"
+    r"\bwhat\s+time\s+is\s+it\b|"
+    r"\btime\s+(?:is\s+)?it\b|"
+    r"\bcurrent\s+time\b|"
+    r"\bgot\s+the\s+time\b",
+    re.I,
+)
+_DATE_Q = re.compile(
+    r"\bwhat(?:'s|s|\s+is)?\s+(?:the\s+|today'?s?\s+)?date\b|"
+    r"\bwhat\s+day\s+is\s+(?:it|today)\b|"
+    r"\btoday'?s\s+date\b",
+    re.I,
+)
+_DAY_Q = re.compile(
+    r"\bwhat\s+day\s+of\s+the\s+week\b|"
+    r"\bwhich\s+day\s+(?:is\s+)?it\b",
+    re.I,
+)
+_SELF_Q = re.compile(
+    r"\bwho\s+are\s+you\b|"
+    r"\bwhat\s+are\s+you\b|"
+    r"\bwhat\s+is\s+ara\b|"
+    r"\btell\s+me\s+about\s+yourself\b|"
+    r"\bwho\s+made\s+you\b",
+    re.I,
+)
+_GREETING_Q = re.compile(
+    r"\bhow\s+are\s+you\b|\bhow'?s\s+it\s+going\b|\bwhat'?s\s+up\b",
+    re.I,
+)
+
+
+def _answer_general(q: str) -> str | None:
+    now = datetime.now()
+    if _TIME_Q.search(q):
+        return f"It's {now.strftime('%-I:%M %p').lstrip('0')}."
+    if _DAY_Q.search(q):
+        return f"It's {now.strftime('%A')}."
+    if _DATE_Q.search(q):
+        return f"Today is {now.strftime('%A, %B %-d, %Y')}."
+    if _SELF_Q.search(q):
+        return ("I'm Ara — a live-call copilot. I listen to your calls, "
+                "read your calendar, and answer in real time.")
+    if _GREETING_Q.search(q):
+        return "Good — listening in. Ask me anything."
+    return None
 
 
 # Anything that smells like a scheduling question routes to the live calendar.
@@ -40,6 +92,11 @@ def ask_ara(question: str, timeout: int = 10) -> str | None:
     m = re.search(r'Just said:\s*"([^"]+)"', q)
     if m:
         q = m.group(1).strip()
+
+    # 1. General-knowledge shortcuts (time, date, identity) — instant.
+    g = _answer_general(q)
+    if g:
+        return g
 
     connectors = route(q)
 
