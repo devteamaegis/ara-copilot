@@ -109,7 +109,7 @@ def get_events(verbose: bool = False) -> list[dict]:
 
     try:
         r = subprocess.run(["osascript", "-e", _APPLESCRIPT],
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, timeout=45)
     except Exception as e:
         print(f"[calendar] osascript failed: {e}")
         return []
