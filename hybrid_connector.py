@@ -13,11 +13,14 @@ import calendar_lookup
 # --- General-knowledge patterns handled locally (instant, no network) ---
 
 _TIME_Q = re.compile(
-    r"\bwhat(?:'s|\s+is)?\s+the\s+time\b|"
+    r"\bwhat(?:'s|s|\s+is)?\s+the\s+time\b|"
     r"\bwhat\s+time\s+is\s+it\b|"
-    r"\btime\s+(?:is\s+)?it\b|"
+    r"\btime\s+is\s+it\b|"
+    r"\bwhat\s+time\s+it\s+is\b|"
     r"\bcurrent\s+time\b|"
-    r"\bgot\s+the\s+time\b",
+    r"\bgot\s+the\s+time\b|"
+    r"\btell\s+me\s+the\s+time\b|"
+    r"\btime\s+right\s+now\b",
     re.I,
 )
 _DATE_Q = re.compile(
@@ -32,11 +35,18 @@ _DAY_Q = re.compile(
     re.I,
 )
 _SELF_Q = re.compile(
-    r"\bwho\s+are\s+you\b|"
-    r"\bwhat\s+are\s+you\b|"
+    r"\bwho\s+are\s+you\b(?!\s+(?:doing|up|seeing|meeting))|"
+    r"\bwhat\s+are\s+you\b(?!\s+(?:doing|up|seeing|meeting|planning))|"
     r"\bwhat\s+is\s+ara\b|"
     r"\btell\s+me\s+about\s+yourself\b|"
     r"\bwho\s+made\s+you\b",
+    re.I,
+)
+# "What are you doing [time]" is a schedule question, not identity.
+_SCHEDULE_Q = re.compile(
+    r"\bwhat\s+are\s+you\s+(?:doing|up\s+to|planning)\b|"
+    r"\bwhat(?:'s|s|\s+is)?\s+your\s+schedule\b|"
+    r"\bany\s+plans\b",
     re.I,
 )
 _GREETING_Q = re.compile(
@@ -98,6 +108,13 @@ def ask_ara(question: str, timeout: int = 10) -> str | None:
     if g:
         return g
 
+    # 2. Schedule phrasings ("what are you doing today") → calendar.
+    if _SCHEDULE_Q.search(q):
+        ans = calendar_lookup.answer(q)
+        if ans:
+            return ans
+        return "Nothing on your calendar for that window."
+
     connectors = route(q)
 
     if "Google Calendar" in connectors or _CAL_HINT.search(q):
@@ -106,11 +123,12 @@ def ask_ara(question: str, timeout: int = 10) -> str | None:
             return ans
         return "No events on your calendar for that window."
 
+    # Best-effort fallbacks — much friendlier than "outside my integrations."
     if connectors:
-        return (f"I'd need {connectors[0]} connected to answer that — "
-                f"calendar is the only live connector in this build.")
-    return ("That one's outside my live integrations — I can only answer "
-            "calendar questions right now.")
+        return (f"I'd need {connectors[0]} live to answer that properly — "
+                f"try asking about the calendar, the time, or the date.")
+    return ("I can't answer that one right now — try asking about the "
+            "calendar, the time, or what I am.")
 
 
 if __name__ == "__main__":

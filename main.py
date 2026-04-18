@@ -16,17 +16,38 @@ import threading
 import time
 
 
+_QUESTION_STARTERS = (
+    "what", "when", "where", "who", "why", "how", "which",
+    "is", "are", "am", "was", "were",
+    "do", "does", "did", "can", "could", "would", "will",
+    "have", "has", "should", "tell", "got",
+)
+
+
 def _last_sentence(text: str, fallback_words: int = 16) -> str:
-    """Grab the most recent utterance from a running transcript — the final
-    sentence after the last terminal punctuation. Falls back to the last N
-    words if Whisper didn't add punctuation."""
+    """Pick the most recent *question-shaped* sentence from a running
+    transcript. Whisper often emits noisy chunks, so we prefer sentences
+    that start with a question word, falling back to the last chunk."""
     if not text:
         return ""
     parts = [p.strip() for p in re.split(r'[.?!]+', text) if p.strip()]
-    if parts and len(parts[-1].split()) >= 2:
-        return parts[-1]
-    words = text.split()
-    return " ".join(words[-fallback_words:]) if words else ""
+    if not parts:
+        words = text.split()
+        return " ".join(words[-fallback_words:]) if words else ""
+
+    # Prefer the LATEST sentence that looks like a question.
+    for p in reversed(parts):
+        words = p.split()
+        if len(words) < 2:
+            continue
+        if words[0].lower().strip(",") in _QUESTION_STARTERS:
+            return p
+
+    # No clearly question-shaped sentence — take the latest substantive chunk.
+    for p in reversed(parts):
+        if len(p.split()) >= 2:
+            return p
+    return parts[-1]
 
 import rumps
 from pynput import keyboard
