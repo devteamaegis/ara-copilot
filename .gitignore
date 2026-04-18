@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual env
+venv/
+env/
+.venv/
+
+# Runtime logs
+overlay.log
+*.log
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Secrets — never commit
+.env
+.env.*
+*.key
+credentials.json
