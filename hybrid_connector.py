@@ -32,6 +32,15 @@ def send_message(_text: str) -> bool:
 
 def ask_ara(question: str, timeout: int = 10) -> str | None:
     q = question.lstrip("?").strip()
+
+    # If this is a Live-call-mode prompt, extract ONLY what the user actually
+    # said (between Just said: "..."). Otherwise the calendar resolver will
+    # match words like "connected" or "Drive" from the meta-prompt instead of
+    # the real question.
+    m = re.search(r'Just said:\s*"([^"]+)"', q)
+    if m:
+        q = m.group(1).strip()
+
     connectors = route(q)
 
     if "Google Calendar" in connectors or _CAL_HINT.search(q):

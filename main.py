@@ -9,10 +9,24 @@ Ties together:
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import time
+
+
+def _last_sentence(text: str, fallback_words: int = 16) -> str:
+    """Grab the most recent utterance from a running transcript — the final
+    sentence after the last terminal punctuation. Falls back to the last N
+    words if Whisper didn't add punctuation."""
+    if not text:
+        return ""
+    parts = [p.strip() for p in re.split(r'[.?!]+', text) if p.strip()]
+    if parts and len(parts[-1].split()) >= 2:
+        return parts[-1]
+    words = text.split()
+    return " ".join(words[-fallback_words:]) if words else ""
 
 import rumps
 from pynput import keyboard
@@ -155,9 +169,18 @@ class AraCopilot(rumps.App):
         transcript = self.transcriber.get_recent_text(seconds=ARA_CONTEXT_SECONDS)
         if not transcript or len(transcript.split()) < 4:
             return
+        # Use ONLY the most recent sentence so old questions don't linger in
+        # the sliding window and cause the overlay to re-answer stale content.
+        question = _last_sentence(transcript)
+        if not question or len(question.split()) < 3:
+            return
+        # Skip if we just answered this exact utterance.
+        if question == getattr(self, "_last_question", None):
+            return
+        self._last_question = question
         self.last_ara_suggestion = time.time()
-        hint = hint_sentence(transcript)
-        connectors = route(transcript)
+        hint = hint_sentence(question)
+        connectors = route(question)
         if connectors:
             print(f"[brain] routed to: {connectors}")
         prompt = (
@@ -168,7 +191,7 @@ class AraCopilot(rumps.App):
             "one sharp fact. Reply in ONE sentence, under 25 words, no "
             "preamble. "
             + (hint + " " if hint else "")
-            + "Just said: \"" + transcript + "\""
+            + "Just said: \"" + question + "\""
         )
         self._ask_ara_async(prompt, label="answer")
 
